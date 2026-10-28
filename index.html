@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgriGuard Live Dashboard</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background-color: #121212; color: #ffffff; }
+        header { background-color: #1f1f1f; padding: 15px 30px; border-bottom: 2px solid #4CAF50; display: flex; justify-content: space-between; align-items: center;}
+        h1 { margin: 0; font-size: 24px; color: #4CAF50; }
+        .clear-btn { background-color: #ff5252; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .clear-btn:hover { background-color: #ff1744; }
+        .container { display: flex; height: calc(100vh - 65px); }
+        .video-panel { flex: 2; padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #0a0a0a;}
+        img#videoStream { max-width: 100%; max-height: 80vh; border: 3px solid #333; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        .alerts-panel { flex: 1; padding: 20px; background-color: #1e1e1e; border-left: 1px solid #333; overflow-y: auto; }
+        h2 { margin-top: 0; font-size: 20px; border-bottom: 1px solid #444; padding-bottom: 10px; display: flex; justify-content: space-between;}
+        
+        .alert-card { display: flex; gap: 12px; background-color: #2a2a2a; border-left: 4px solid #ff5252; padding: 12px; margin-bottom: 15px; border-radius: 4px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .alert-card.safe { border-left-color: #4CAF50; }
+        .alert-thumb { width: 80px; height: 80px; object-fit: cover; border-radius: 4px; border: 1px solid #444; }
+        .alert-content { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+        .alert-time { font-size: 12px; color: #aaa; margin-bottom: 5px; }
+        .alert-reasons { margin: 0; font-size: 14px; font-weight: 500; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>🚜 AgriGuard Monitor</h1>
+        <button class="clear-btn" onclick="clearHistory()">🗑️ Clear History</button>
+    </header>
+
+    <div class="container">
+        <!-- Live Video Feed -->
+        <div class="video-panel">
+            <img id="videoStream" src="/api/video_feed" alt="Live Camera Stream">
+            <p style="color: #666; margin-top: 15px;">Model: YOLOv8 | Inference: Real-time</p>
+        </div>
+
+        <!-- Live Alerts List -->
+        <div class="alerts-panel">
+            <h2>Recent Events</h2>
+            <div id="alertsContainer">
+                <p style="color:#aaa;">Loading history...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function fetchAlerts() {
+            try {
+                const response = await fetch('/api/detections?limit=15');
+                const data = await response.json();
+                
+                const container = document.getElementById('alertsContainer');
+                container.innerHTML = ''; 
+
+                if(data.events.length === 0) {
+                    container.innerHTML = '<p style="color:#aaa;">No events recorded yet.</p>';
+                    return;
+                }
+
+                data.events.forEach(event => {
+                    const isIntrusion = event.isIntrusion;
+                    const card = document.createElement('div');
+                    card.className = `alert-card ${isIntrusion ? 'danger' : 'safe'}`;
+                    
+                    const timeString = new Date(event.capturedAt).toLocaleString();
+                    const reasons = event.intrusionReasons.length > 0 
+                                    ? event.intrusionReasons.join(', ') 
+                                    : 'Routine detection';
+                    
+                    card.innerHTML = `
+                        <img src="/${event.imagePath}" alt="Snapshot" class="alert-thumb" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MCIgaGVpZ2h0PSI4MCI+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0iIzMzMyIvPjwvc3ZnPg=='">
+                        <div class="alert-content">
+                            <div class="alert-time">${timeString}</div>
+                            <div class="alert-reasons">${isIntrusion ? '⚠️ ' : '✅ '}${reasons}</div>
+                        </div>
+                    `;
+                    container.appendChild(card);
+                });
+            } catch (error) {
+                console.error("Failed to fetch alerts:", error);
+            }
+        }
+
+        async function clearHistory() {
+            if(confirm("Are you sure you want to delete all detection history?")) {
+                await fetch('/api/detections', { method: 'DELETE' });
+                fetchAlerts();
+            }
+        }
+
+        // Refresh alerts every 2 seconds
+        setInterval(fetchAlerts, 2000);
+        fetchAlerts();
+    </script>
+</body>
+</html>
